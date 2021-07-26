@@ -1,0 +1,66 @@
+//Epic Link Custom Field ID
+final epicLinkCf = get("/rest/api/2/field")
+    .asObject(List)
+    .body
+    .find {
+        (it as Map).name == 'Epic Link'
+    } as Map
+
+//Number Custom Field ID
+final numberCf = get("/rest/api/2/field")
+    .asObject(List)
+    .body
+    .find {
+        (it as Map).name == '<CustomFieldNameHere>'
+    } as Map
+
+def issueFields = get("/rest/api/2/issue/$issue.key")
+    .asObject(Map)
+    .body
+    .fields as Map
+
+//If issue has no parent or is not related with an epic, the script will not be executed
+def issueParent = issueFields.find { it.key == 'parent' }?.value as Map
+def epicKey = issueFields.find { it.key == epicLinkCf.id }?.value
+if (!epicKey && !issueParent) {
+    return
+}
+
+//If the issue is sub-task, Epic Key is obtained from the parent issue
+if (issueParent) {
+    def parentIssueField = get("/rest/api/2/issue/$issueParent.key")
+        .asObject(Map)
+        .body
+        .fields as Map
+
+    epicKey = parentIssueField.find { it.key == epicLinkCf.id }.value
+}
+
+//Obtain all related epic issues, including sub-tasks
+def allChildIssues = get("/rest/api/2/search")
+    .queryString('jql', "linkedissue = $epicKey")
+    .header('Content-Type', 'application/json')
+    .asObject(Map)
+    .body
+    .issues as List<Map>
+
+def sum = 0
+def issues = allChildIssues.findAll { it.key != epicKey }
+
+issues.each {
+    def fields = get("/rest/api/2/issue/$it.key")
+        .header('Content-Type', 'application/json')
+        .asObject(Map)
+        .body
+        .fields as Map
+    def numberCfValue = fields[numberCf.id] ?: 0
+    sum += numberCfValue as Integer
+}
+
+put("/rest/api/2/issue/$epicKey")
+    .header("Content-Type", "application/json")
+    .body([
+        fields: [
+            (numberCf.id): sum
+        ]
+    ]).asString()
