@@ -1,0 +1,37 @@
+// Add the next line as a condition to the script listener, so it gets executed only for epic issues, the line must be written uncommented:
+// issue.isEpic
+
+// Check if the resolution has been changed
+def resolutionChange = changelog.items.find {
+    (it as Map).field == 'resolution'
+} as Map
+logger.info("The resolution change of issue '${issue.key}': ${resolutionChange}.")
+
+if (!resolutionChange) {
+    logger.info("The resolution didn't change.")
+    return
+}
+
+// Compute the 'Epic Status' value to set based on the resolution value
+def newEpicStatusValue = (resolutionChange.toString == 'Done') ? 'Done' : 'To Do'
+
+// Get the 'Epic Status' field ID
+final epicStatusField = get("/rest/api/2/field")
+    .asObject(List)
+    .body
+    .find {
+        (it as Map).name == 'Epic Status'
+    } as Map
+def epicStatusFieldId = epicStatusField.id
+
+logger.info("Updating Epic Status field (${epicStatusFieldId}) to '${newEpicStatusValue}'.")
+// Update the 'Epic Status' field value
+put("/rest/api/2/issue/${issue.key}")
+    .queryString("overrideScreenSecurity", Boolean.TRUE)
+    .header("Content-Type", "application/json")
+    .body([
+        fields: [
+            (epicStatusFieldId): [value: newEpicStatusValue]
+        ]
+    ])
+    .asString()
