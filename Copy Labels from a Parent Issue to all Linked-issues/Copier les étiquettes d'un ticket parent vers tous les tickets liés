@@ -1,0 +1,43 @@
+// Specify the IssueKey
+final issueKey = "TEST-1"
+
+// Make a rest call to return the Issue
+def issue = get("/rest/api/2/issue/${issueKey}")
+    .header('Content-Type', 'application/json')
+    .asObject(Map)
+    .body as Map
+
+def fields = issue.fields as Map
+// Get the labels from the issue
+def labels = fields.labels
+
+// Find the linked issues
+def linkedIssues = fields.issuelinks as List<Map>
+
+// Loop over each linked issue
+def successStatusByIssueKey = linkedIssues.collectEntries { Map linkedIssue ->
+    if (!linkedIssue.outwardIssue) {
+        def inwardIssue = linkedIssue.inwardIssue as Map
+        return [(inwardIssue.key): "Link is not outward for linked issue ${inwardIssue.key}"]
+    }
+    // Update each linked issue to set the labels using the key for each linked issue
+    def outwardIssue = linkedIssue.outwardIssue as Map
+    def updateLinkedIssue = put("/rest/api/2/issue/${outwardIssue.key}")
+        .header('Content-Type', 'application/json')
+        .body([
+            fields: [
+                labels: labels
+            ]
+        ])
+        .asString()
+    if (updateLinkedIssue.status == 204) {
+        // Print to the log tabs what iteration the loop is on and the key of the issue that was updated
+        logger.info("Labels on ${outwardIssue.key} issue has been set.")
+    } else {
+        // Print to the log tabs what iteration the loop is on and the key of the issue that was not updated
+        logger.error("Labels on ${outwardIssue.key} issue has not been set.")
+    }
+    [(outwardIssue.key): (updateLinkedIssue.status == 204)]
+}
+
+"Status by issue key (labels copied?): ${successStatusByIssueKey}. \nPlease see the 'Logs' tab for more information on what issues were updated."
