@@ -1,0 +1,45 @@
+// Define a JQL query to search for the issues on which you want to update the resolution
+final jqlQuery = "project = TEST AND issueType = Bug"
+
+// The Name of the resolution to be set
+def resolutionName = 'Duplicate'
+
+// Search for the issues we want to update
+def searchReq = get("/rest/api/2/search")
+    .queryString("jql", jqlQuery)
+    .queryString("fields", "resolution")
+    .asObject(Map)
+// Verify the search completed successfully
+assert searchReq.status == 200
+
+// Save the search results as a Map
+def searchResult = searchReq.body as Map
+def issues = searchResult.issues as List<Map>
+
+// Iterate through the search results and update the resolution for each issue returned
+def successStatusByIssueKey = issues.collectEntries { Map issue ->
+    // Log out what the value from the resolution field was for the original issue.
+    def fields = issue.fields as Map
+    logger.info("The original resolution was ${fields.resolution ?: 'null'} for the ${issue.key} issue.")
+
+    def result = put("/rest/api/2/issue/${issue.key}")
+        .queryString("overrideScreenSecurity", Boolean.TRUE)
+        .header('Content-Type', 'application/json')
+        .body([
+            fields: [
+                resolution: [name: resolutionName]
+            ]
+        ]).asString()
+
+    // Log out the issues updated or which failed to update
+    if (result.status == 204) {
+        logger.info("Resolution set to ${resolutionName} for the ${issue.key} issue")
+    } else {
+        logger.warn("Failed to set the resolution to ${resolutionName} on the ${issue.key} issue. ${result.status}: ${result.body}")
+    }
+
+    // Collect the success status by issue key to show them as part of the script return value
+    [(issue.key): (result.status == 204)]
+}
+
+"Status by issue key (updated?): ${successStatusByIssueKey}"
