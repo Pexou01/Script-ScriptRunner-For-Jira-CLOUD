@@ -1,0 +1,35 @@
+// Specify the master project  to get the versions form
+final sourceProjectKey = 'SRC'
+
+// Specify the key of the project to copy the version to
+final destinationProjectKey = 'DST'
+
+// Get the project versions
+def versions = get("/rest/api/2/project/${sourceProjectKey}/versions")
+    .header('Content-Type', 'application/json')
+    .asObject(List).body as List<Map>
+
+// Loop over each version returned and create a version in the new project
+def successStatusByVersionId = versions.collectEntries { version ->
+    // Copy the version and specify the destination project
+    def versionCopy = version.subMap(['name', 'description', 'archived', 'released', 'startDate', 'releaseDate', 'project'])
+    versionCopy['project'] = destinationProjectKey
+
+    // Make the rest call to create the version
+    logger.info("Copying the version with id '${version.id}' and name '${version.name}'")
+    def createdVersionResponse = post('/rest/api/2/version')
+        .header('Content-Type', 'application/json')
+        .body(versionCopy)
+        .asObject(Map)
+
+    // Log out the versions copied or which failed to be copied
+    if (createdVersionResponse.status == 201) {
+        logger.info("Version with id '${version.id}' and name '${version.name}' copied. New id: ${createdVersionResponse.body.id}")
+    } else {
+        logger.warn("Failed to copy version with id '${version.id}' and name '${version.name}'. ${createdVersionResponse.status}: ${createdVersionResponse.body}")
+    }
+
+    [(version.id): (createdVersionResponse.status == 201)]
+}
+
+"Status by source version id (copied?): ${successStatusByVersionId}"
