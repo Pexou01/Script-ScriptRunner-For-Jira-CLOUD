@@ -1,0 +1,11 @@
+final customfieldID = 'customfield_1000' //get this from /fields api
+final newFieldValue = 'New Value'
+final issueKey = 'MYPROJECT-1'
+
+put("/rest/api/2/issue/${issueKey}")
+    .header('Content-Type', 'application/json')
+    .body([
+        fields: [
+            (customfieldID): newFieldValue
+        ]
+    ]).asString()
