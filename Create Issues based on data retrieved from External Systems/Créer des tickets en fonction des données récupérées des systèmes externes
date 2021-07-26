@@ -1,0 +1,44 @@
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+
+final projectKey = 'TEST'
+//External task type name
+final externalIssueTypeName = 'External Task'
+//External system URL
+final externalUrl = 'https://external.system'
+
+//We can compute the time between epoch and one hour before now in order to obtain issues from external by this time.
+def timestamp = LocalDateTime.now()
+    .minusHours(1)
+    .toInstant(ZoneOffset.UTC).toEpochMilli()
+
+def taskType = get('/rest/api/2/issuetype')
+    .asObject(List)
+    .body
+    .find { it['name'] == externalIssueTypeName } ['id']
+
+//We can define here the endpoint to get issues from the external system and the query strings that are needed.
+//In this example, we use "since" as a query string parameter where is defined the time by which we want to search.
+def results = get("$externalUrl/rest/api/1/results")
+    .queryString('since', timestamp)
+    .asObject(List)
+    .body as List<Map>
+
+//For every result obtained, a new issue is created.
+results.each { Map result ->
+    post('/rest/api/2/issue')
+        .header('Content-Type', 'application/json')
+        .body([
+            fields: [
+                summary    : result.name,
+                description: result.message,
+                project    : [
+                    key: projectKey
+                ],
+                issuetype  : [
+                    id: taskType
+                ]
+            ]
+        ])
+        .asString().body
+}
